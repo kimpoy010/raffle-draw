@@ -7,7 +7,7 @@ const BALLOONS = Array.from({ length: 18 }, (_, i) => ({
   id: i,
   color: COLORS[i % COLORS.length],
   left: `${4 + (i * 94 / 17) % 92}%`,
-  top:  `${(i * 19) % 75}%`,           // spread between 0%–75% from top
+  top:  `${10 + (i * 17) % 60}vh`,     // spread between 10vh–70vh, never near top edge
   size: 48 + (i * 7) % 30,             // 48–78px
   delay: `${(i * 0.28) % 2.4}s`,
   duration: `${5 + (i * 0.45) % 3}s`,
