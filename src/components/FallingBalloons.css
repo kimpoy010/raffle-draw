@@ -5,29 +5,38 @@
   z-index: 9;
 }
 
+/* Each balloon is fixed so it's always relative to the viewport */
 .balloon-wrap {
   position: fixed;
-  top: -260px;
   animation: balloon-fall linear both;
 }
 
 .balloon-svg {
   display: block;
-  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25));
-  animation: balloon-sway-r 2.2s ease-in-out infinite alternate;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
 }
 
+.balloon-sway-l {
+  animation: balloon-sway-l ease-in-out infinite alternate;
+}
+
+.balloon-sway-r {
+  animation: balloon-sway-r ease-in-out infinite alternate;
+}
+
+/* Balloon falls from its starting top position down off the bottom */
 @keyframes balloon-fall {
-  from { transform: translateY(0); }
-  to   { transform: translateY(130vh); }
+  from { transform: translateY(0);      opacity: 1; }
+  90%  { opacity: 1; }
+  to   { transform: translateY(115vh);  opacity: 0; }
 }
 
 @keyframes balloon-sway-l {
-  from { transform: rotate(-10deg); }
-  to   { transform: rotate(6deg); }
+  from { transform: rotate(-9deg); }
+  to   { transform: rotate(7deg);  }
 }
 
 @keyframes balloon-sway-r {
-  from { transform: rotate(8deg); }
-  to   { transform: rotate(-8deg); }
+  from { transform: rotate(7deg);  }
+  to   { transform: rotate(-9deg); }
 }
