@@ -183,7 +183,7 @@ export default function AdminPage() {
       await triggerDraw(winners)
       // Add to the drawn list only after the animation finishes so the
       // winner doesn't appear in Previous Winners before the reveal.
-      setTimeout(() => addDrawnWinners(winners), DRAW_DURATION_MS + 300)
+      setTimeout(() => addDrawnWinners(winners), DRAW_DURATION_MS + 3000)
     } catch (err) {
       setError(`Draw failed: ${err.message}`)
     }
