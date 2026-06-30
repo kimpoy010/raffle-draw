@@ -82,7 +82,6 @@ export default function DrawPage() {
         </div>
         <div className="header-right">
           <span className={`live-dot${connected ? ' live' : ''}`} title={connected ? 'Connected' : 'Connecting…'} />
-          <button className="btn-ghost" onClick={() => navigate('/admin')}>⚙️ Admin</button>
         </div>
       </header>
 
