@@ -1,5 +1,5 @@
 import { db } from './firebase.js'
-import { ref, set, get, onValue, off, serverTimestamp } from 'firebase/database'
+import { ref, set, get, onValue, off, remove } from 'firebase/database'
 
 const ROOT = 'raffle'
 
@@ -36,6 +36,10 @@ export async function resetDrawnWinners() {
 
 export async function setDrawIdle() {
   await set(ref(db, `${ROOT}/draw`), { state: 'idle', winners: [], startedAt: 0 })
+}
+
+export async function clearRaffle() {
+  await remove(ref(db, ROOT))
 }
 
 export function subscribeRaffle(callback) {

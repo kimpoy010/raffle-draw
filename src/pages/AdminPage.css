@@ -1,3 +1,44 @@
+/* Danger zone */
+.danger-card {
+  border-color: rgba(220, 38, 38, 0.3);
+}
+
+.btn-danger {
+  padding: 11px 20px;
+  background: transparent;
+  border: 1px solid #dc2626;
+  border-radius: 8px;
+  color: #dc2626;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  font-family: var(--sans);
+  display: block;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+  color: #fff;
+}
+
+.btn-danger.confirm {
+  background: #dc2626;
+  color: #fff;
+  animation: shake 0.3s ease;
+}
+
+.btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25%       { transform: translateX(-4px); }
+  75%       { transform: translateX(4px); }
+}
+
 /* PIN screen */
 .pin-screen {
   min-height: 100svh;

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import {
   saveRaffleConfig, triggerDraw, addDrawnWinners,
-  removeDrawnWinners, resetDrawnWinners, setDrawIdle, subscribeRaffle,
+  removeDrawnWinners, resetDrawnWinners, setDrawIdle, subscribeRaffle, clearRaffle,
 } from '../lib/raffle.js'
 import './AdminPage.css'
 
@@ -210,6 +210,26 @@ export default function AdminPage() {
     }
   }
 
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [clearing, setClearing] = useState(false)
+
+  const handleClearRaffle = async () => {
+    if (!confirmClear) { setConfirmClear(true); return }
+    setClearing(true)
+    try {
+      await clearRaffle()
+      setEntries([]); setFileName(''); setWorkbookData(null)
+      setColumnOptions([]); setSheetNames([]); setSelectedSheet('')
+      setForcedWinner(''); setSaved(false); setCurrentWinners([])
+      setDrawnWinners([]); setConfirmClear(false)
+      if (fileRef.current) fileRef.current.value = ''
+    } catch (err) {
+      setError(`Clear failed: ${err.message}`)
+    } finally {
+      setClearing(false)
+    }
+  }
+
   const filteredEntries = entries.filter(e => e.toLowerCase().includes(search.toLowerCase()))
 
   // PIN screen
@@ -393,6 +413,26 @@ export default function AdminPage() {
             {search && <p className="search-count">{filteredEntries.length} of {entries.length} shown</p>}
           </section>
         )}
+        {/* New Raffle */}
+        <section className="admin-card danger-card">
+          <h2>Start New Raffle</h2>
+          <p className="section-sub">
+            Clears all entries, drawn winners, and draw history from Firebase. This cannot be undone.
+          </p>
+          <button
+            className={`btn-danger${confirmClear ? ' confirm' : ''}`}
+            onClick={handleClearRaffle}
+            disabled={clearing}
+          >
+            {clearing ? 'Clearing…' : confirmClear ? '⚠️ Tap again to confirm' : '🗑️ Clear & Start New Raffle'}
+          </button>
+          {confirmClear && (
+            <button className="btn-ghost" style={{ marginTop: 8 }} onClick={() => setConfirmClear(false)}>
+              Cancel
+            </button>
+          )}
+        </section>
+
       </main>
     </div>
   )
