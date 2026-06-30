@@ -16,7 +16,7 @@ const BALLOONS = Array.from({ length: 20 }, (_, i) => ({
 export default function FallingBalloons() {
   return (
     <div className="balloons-container" aria-hidden="true">
-      {BALLOONS.map(({ id, left, size, delay, duration, rotate }) => (
+      {BALLOONS.map(({ id, left, size, delay, duration, rotate, hue }) => (
         <div
           key={id}
           className="balloon-wrap"
