@@ -55,14 +55,15 @@ export default function DrawPage() {
   const [connected, setConnected]       = useState(false)
   const [celebrating, setCelebrating]   = useState(false)
 
-  const tickRef      = useRef(null)
-  const lastStartRef = useRef(0)
-  const entriesRef   = useRef([])
+  const tickRef         = useRef(null)
+  const lastStartRef    = useRef(0)
+  const entriesRef      = useRef([])
+  const initialLoadRef  = useRef(true)  // skip stale draw state on first Firebase callback
 
   useEffect(() => {
     const unsub = subscribeRaffle((data) => {
       setConnected(true)
-      if (!data) return
+      if (!data) { initialLoadRef.current = false; return }
 
       const config     = data.config ?? {}
       const newEntries = config.entries ?? []
@@ -71,6 +72,13 @@ export default function DrawPage() {
 
       const drawn = data.drawnWinners ?? []
       setDrawnWinners(Array.isArray(drawn) ? drawn : Object.values(drawn))
+
+      // Ignore whatever draw state exists when the page first loads
+      if (initialLoadRef.current) {
+        initialLoadRef.current = false
+        if (data.draw) lastStartRef.current = data.draw.startedAt ?? 0
+        return
+      }
 
       const draw = data.draw
       if (!draw || draw.state === 'idle') return
@@ -104,6 +112,7 @@ export default function DrawPage() {
         setTimeout(() => {
           setCelebrating(true)
           launchCelebration()
+          setTimeout(() => setCelebrating(false), 3500)
         }, 3200)
       }
     }, TICK_INTERVAL_MS)
