@@ -1,9 +1,30 @@
 import { useState, useRef, useCallback } from 'react'
-import readXlsxFile from 'read-excel-file/browser'
+import * as XLSX from 'xlsx'
 import './App.css'
 
 const DRAW_DURATION_MS = 2500
 const TICK_INTERVAL_MS = 60
+
+function parseWorkbook(workbook, sheetName, hasHeader) {
+  const sheet = workbook.Sheets[sheetName]
+  const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+  const rows = raw.filter(row => row.some(cell => String(cell).trim() !== ''))
+  if (rows.length === 0) return { headers: [], dataRows: [] }
+  if (hasHeader) {
+    const headers = rows[0].map((h, i) => ({
+      label: String(h).trim() || `Column ${i + 1}`,
+      index: i,
+    }))
+    return { headers, dataRows: rows.slice(1) }
+  } else {
+    const cols = rows[0].length
+    const headers = Array.from({ length: cols }, (_, i) => ({
+      label: `Column ${i + 1}`,
+      index: i,
+    }))
+    return { headers, dataRows: rows }
+  }
+}
 
 export default function App() {
   const [entries, setEntries] = useState([])
@@ -14,7 +35,11 @@ export default function App() {
   const [fileName, setFileName] = useState('')
   const [columnOptions, setColumnOptions] = useState([])
   const [selectedColumn, setSelectedColumn] = useState(null)
-  const [rawRows, setRawRows] = useState([])
+  const [sheetNames, setSheetNames] = useState([])
+  const [selectedSheet, setSelectedSheet] = useState('')
+  const [hasHeader, setHasHeader] = useState(true)
+  const [workbook, setWorkbook] = useState(null)
+  const [dataRows, setDataRows] = useState([])
   const [error, setError] = useState('')
   const [drawCount, setDrawCount] = useState(1)
   const fileRef = useRef(null)
@@ -29,15 +54,21 @@ export default function App() {
     setFileName('')
     setColumnOptions([])
     setSelectedColumn(null)
-    setRawRows([])
+    setSheetNames([])
+    setSelectedSheet('')
+    setHasHeader(true)
+    setWorkbook(null)
+    setDataRows([])
     setError('')
     setDrawCount(1)
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  const applyColumnSelection = (rows, colIndex) => {
+  const applySelection = (wb, sheetName, colIndex, header) => {
+    const { headers, dataRows: rows } = parseWorkbook(wb, sheetName, header)
+    setColumnOptions(headers)
+    setDataRows(rows)
     const names = rows
-      .slice(1)
       .map(row => String(row[colIndex] ?? '').trim())
       .filter(Boolean)
     setEntries(names)
@@ -45,28 +76,41 @@ export default function App() {
     setCurrentWinner(null)
   }
 
-  const parseFile = async (file) => {
+  const parseFile = (file) => {
     setError('')
-    try {
-      const rows = await readXlsxFile(file)
-      if (!rows || rows.length < 2) {
-        setError('The file appears to be empty or has no data rows.')
-        return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result)
+        const wb = XLSX.read(data, { type: 'array' })
+        if (!wb.SheetNames.length) {
+          setError('No sheets found in this file.')
+          return
+        }
+        const sheet = wb.SheetNames[0]
+        const { headers, dataRows: rows } = parseWorkbook(wb, sheet, true)
+        if (rows.length === 0) {
+          setError('The sheet appears to be empty. Make sure the file has data rows.')
+          return
+        }
+        setWorkbook(wb)
+        setSheetNames(wb.SheetNames)
+        setSelectedSheet(sheet)
+        setHasHeader(true)
+        setColumnOptions(headers)
+        setDataRows(rows)
+        setSelectedColumn(0)
+        setFileName(file.name)
+        const names = rows.map(row => String(row[0] ?? '').trim()).filter(Boolean)
+        setEntries(names)
+        setDrawnWinners([])
+        setCurrentWinner(null)
+      } catch {
+        setError('Could not read the file. Please upload a valid .xlsx or .xls file.')
       }
-      const headers = rows[0].map((h, i) => ({
-        label: String(h ?? `Column ${i + 1}`),
-        index: i,
-      }))
-      setRawRows(rows)
-      setColumnOptions(headers)
-      setSelectedColumn(headers[0].index)
-      setFileName(file.name)
-      setDrawnWinners([])
-      setCurrentWinner(null)
-      applyColumnSelection(rows, headers[0].index)
-    } catch {
-      setError('Could not read the file. Please upload a valid .xlsx or .xls file.')
     }
+    reader.onerror = () => setError('Failed to read the file.')
+    reader.readAsArrayBuffer(file)
   }
 
   const handleFileChange = (e) => {
@@ -79,7 +123,28 @@ export default function App() {
     setDragOver(false)
     const file = e.dataTransfer.files[0]
     if (file) parseFile(file)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const handleSheetChange = (sheet) => {
+    setSelectedSheet(sheet)
+    setSelectedColumn(0)
+    applySelection(workbook, sheet, 0, hasHeader)
+  }
+
+  const handleHeaderToggle = (val) => {
+    setHasHeader(val)
+    setSelectedColumn(0)
+    applySelection(workbook, selectedSheet, 0, val)
+  }
+
+  const handleColumnChange = (colIndex) => {
+    setSelectedColumn(colIndex)
+    const names = dataRows.map(row => String(row[colIndex] ?? '').trim()).filter(Boolean)
+    setEntries(names)
+    setDrawnWinners([])
+    setCurrentWinner(null)
+  }
 
   const handleDragOver = (e) => { e.preventDefault(); setDragOver(true) }
   const handleDragLeave = () => setDragOver(false)
@@ -162,17 +227,41 @@ export default function App() {
 
         {error && <p className="error-msg">{error}</p>}
 
+        {sheetNames.length > 1 && (
+          <div className="column-row">
+            <label htmlFor="sheet-select">Sheet:</label>
+            <select
+              id="sheet-select"
+              value={selectedSheet}
+              onChange={e => handleSheetChange(e.target.value)}
+            >
+              {sheetNames.map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {fileName && (
+          <div className="column-row">
+            <label>
+              <input
+                type="checkbox"
+                checked={hasHeader}
+                onChange={e => handleHeaderToggle(e.target.checked)}
+              />
+              {' '}First row is a header
+            </label>
+          </div>
+        )}
+
         {columnOptions.length > 0 && (
           <div className="column-row">
             <label htmlFor="col-select">Name column:</label>
             <select
               id="col-select"
               value={selectedColumn ?? ''}
-              onChange={e => {
-                const idx = Number(e.target.value)
-                setSelectedColumn(idx)
-                applyColumnSelection(rawRows, idx)
-              }}
+              onChange={e => handleColumnChange(Number(e.target.value))}
             >
               {columnOptions.map(opt => (
                 <option key={opt.index} value={opt.index}>{opt.label}</option>
