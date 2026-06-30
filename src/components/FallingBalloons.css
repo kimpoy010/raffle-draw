@@ -20,7 +20,7 @@
 
 @keyframes balloon-fall {
   from { transform: translateY(0); }
-  to   { transform: translateY(115vh); }
+  to   { transform: translateY(130vh); }
 }
 
 @keyframes balloon-sway-l {

@@ -8,7 +8,7 @@ const BALLOONS = Array.from({ length: 16 }, (_, i) => ({
   left: `${5 + (i * 97 / 15) % 90}%`,
   size: 48 + (i * 7) % 28,          // 48–76px
   delay: `${(i * 0.31) % 2.8}s`,
-  duration: `${4.5 + (i * 0.4) % 2.5}s`,
+  duration: `${7 + (i * 0.4) % 3}s`,
   sway: i % 2 === 0 ? 'balloon-sway-l' : 'balloon-sway-r',
 }))
 

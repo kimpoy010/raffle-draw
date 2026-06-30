@@ -18,8 +18,8 @@ function launchCelebration() {
     particleCount: 120,
     spread: 70,
     startVelocity: 55,
-    gravity: 0.9,
-    ticks: 300,
+    gravity: 0.7,
+    ticks: 600,
     colors: ['#a855f7','#ec4899','#f59e0b','#10b981','#3b82f6','#fff'],
   }
 
@@ -28,16 +28,16 @@ function launchCelebration() {
   // Party popper — right cannon
   right(null, { ...shared, angle: 120, origin: { x: 1, y: 0.75 } })
 
-  // Sustained rain from the top
-  const end = Date.now() + 3000
+  // Sustained rain from the top for 6 seconds
+  const end = Date.now() + 6000
   const rain = () => {
     confetti({
       particleCount: 6,
       angle: 270,
       spread: 120,
       origin: { x: Math.random(), y: -0.1 },
-      gravity: 1.1,
-      ticks: 200,
+      gravity: 0.8,
+      ticks: 500,
       colors: ['#a855f7','#ec4899','#f59e0b','#10b981','#3b82f6','#fff','#fd8'],
     })
     if (Date.now() < end) requestAnimationFrame(rain)
@@ -113,7 +113,7 @@ export default function DrawPage() {
         setTimeout(() => {
           setCelebrating(true)
           launchCelebration()
-          setTimeout(() => setCelebrating(false), 3500)
+          setTimeout(() => setCelebrating(false), 10000)
         }, 3200)
       }
     }, TICK_INTERVAL_MS)
