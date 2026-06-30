@@ -1,7 +1,7 @@
 /* Continuous upward roll — one cycle = strip scrolls through all 10 digits */
 @keyframes od-roll-lg {
   from { transform: translateY(0); }
-  to   { transform: translateY(-960px); } /* 10 × 96px */
+  to   { transform: translateY(-1400px); } /* 10 × 140px */
 }
 
 @keyframes od-roll-sm {

@@ -142,29 +142,6 @@ export default function DrawPage() {
             )}
           </div>
 
-          <div className="stats-row">
-            <div className="stat-card">
-              <span className="stat-num">{entries.length}</span>
-              <span className="stat-label">Total</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-num">{pool.length}</span>
-              <span className="stat-label">Remaining</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-num">{drawnWinners.length}</span>
-              <span className="stat-label">Drawn</span>
-            </div>
-          </div>
-
-          {drawnWinners.length > 0 && (
-            <div className="history-card">
-              <h2>Previous Winners</h2>
-              <ol className="history-list">
-                {drawnWinners.map((w, i) => <li key={i}>{w}</li>)}
-              </ol>
-            </div>
-          )}
         </main>
       </div>
     </div>
