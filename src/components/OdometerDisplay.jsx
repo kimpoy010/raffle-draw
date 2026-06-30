@@ -24,7 +24,7 @@ function decelDelays(fromDigit, toDigit) {
   })
 }
 
-function OdometerReel({ digit, spinning, settleDelay, size }) {
+function OdometerReel({ digit, spinning, settleDelay, size, onSettled }) {
   const stripRef     = useRef(null)
   const readyRef     = useRef(false)
   const settleTimer  = useRef(null)
@@ -79,11 +79,12 @@ function OdometerReel({ digit, spinning, settleDelay, size }) {
       const delays = decelDelays(snapDigit, digit)
       let cumulative = 0
       let d = snapDigit
-      delays.forEach(delay => {
+      delays.forEach((delay, idx) => {
         cumulative += delay
         const t = setTimeout(() => {
           d = (d + 1) % 10
           el.style.transform = `translateY(${-d * h}px)`
+          if (idx === delays.length - 1) onSettled?.()
         }, cumulative)
         decelTimers.current.push(t)
       })
@@ -115,7 +116,7 @@ function OdometerReel({ digit, spinning, settleDelay, size }) {
 const FIXED_BOXES        = 6
 const SETTLE_INTERVAL_MS = 500   // gap between each reel starting to slow down
 
-export default function OdometerDisplay({ value, spinning, size = 'large' }) {
+export default function OdometerDisplay({ value, spinning, size = 'large', onSettled }) {
   const str    = String(value ?? '0').padStart(FIXED_BOXES, '0')
   const digits = str.slice(-FIXED_BOXES).split('').map(Number)
   const gap    = size === 'small' ? 4 : 6
@@ -129,6 +130,7 @@ export default function OdometerDisplay({ value, spinning, size = 'large' }) {
           spinning={spinning}
           size={size}
           settleDelay={spinning ? 0 : i * SETTLE_INTERVAL_MS}
+          onSettled={i === FIXED_BOXES - 1 ? onSettled : undefined}
         />
       ))}
     </div>

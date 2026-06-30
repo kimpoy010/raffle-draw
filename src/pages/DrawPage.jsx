@@ -59,7 +59,8 @@ export default function DrawPage() {
   const tickRef         = useRef(null)
   const lastStartRef    = useRef(0)
   const entriesRef      = useRef([])
-  const initialLoadRef  = useRef(true)  // skip stale draw state on first Firebase callback
+  const initialLoadRef  = useRef(true)
+  const celebrateRef    = useRef(null)  // called by OdometerDisplay when last digit settles
 
   useEffect(() => {
     const unsub = subscribeRaffle((data) => {
@@ -93,6 +94,14 @@ export default function DrawPage() {
     return () => { unsub(); clearInterval(tickRef.current) }
   }, [])
 
+  const triggerCelebration = () => {
+    setCelebrating(true)
+    launchCelebration()
+    setTimeout(() => setCelebrating(false), 10000)
+  }
+
+  celebrateRef.current = triggerCelebration
+
   const startLocalSpin = (winners, duration) => {
     clearInterval(tickRef.current)
     setSpinning(true)
@@ -109,12 +118,12 @@ export default function DrawPage() {
         setSpinDisplay('')
         setSpinning(false)
         setCurrentWinners(winners)
-        // Delay celebration until odometer finishes settling (6 reels × 500ms + ~1.4s decel)
-        setTimeout(() => {
-          setCelebrating(true)
-          launchCelebration()
-          setTimeout(() => setCelebrating(false), 10000)
-        }, 3200)
+        // For non-numeric (text) raffles, celebrate after the pop-in animation
+        const isNum = entriesRef.current.every(e => /^\d+$/.test(e.trim()))
+        if (!isNum) {
+          setTimeout(triggerCelebration, 600)
+        }
+        // For numeric raffles, OdometerDisplay calls celebrateRef when the last digit lands
       }
     }, TICK_INTERVAL_MS)
   }
@@ -169,6 +178,7 @@ export default function DrawPage() {
                   value={spinning ? (spinDisplay || entries[0]) : currentWinners[0]}
                   spinning={spinning}
                   size="large"
+                  onSettled={() => celebrateRef.current?.()}
                 />
                 {!spinning && currentWinners.length > 1 && (
                   <div className="extra-winners">
