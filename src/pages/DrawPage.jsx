@@ -62,6 +62,12 @@ export default function DrawPage() {
   const initialLoadRef  = useRef(true)
   const celebrateRef    = useRef(null)  // called by OdometerDisplay when last digit settles
 
+  // Dev helper: call testCelebration() in the browser console to preview the animation
+  useEffect(() => {
+    window.testCelebration = () => celebrateRef.current?.()
+    return () => { delete window.testCelebration }
+  }, [])
+
   useEffect(() => {
     const unsub = subscribeRaffle((data) => {
       setConnected(true)
