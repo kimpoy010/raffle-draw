@@ -82,20 +82,46 @@ export default function App() {
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result)
-        const wb = XLSX.read(data, { type: 'array' })
+        const wb = XLSX.read(data, { type: 'array', cellText: true, cellDates: true })
+
         if (!wb.SheetNames.length) {
           setError('No sheets found in this file.')
           return
         }
-        const sheet = wb.SheetNames[0]
-        const { headers, dataRows: rows } = parseWorkbook(wb, sheet, true)
-        if (rows.length === 0) {
-          setError('The sheet appears to be empty. Make sure the file has data rows.')
+
+        const sheetName = wb.SheetNames[0]
+        const sheet = wb.Sheets[sheetName]
+
+        // Try both JSON approaches to find data
+        const asArrays = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false })
+        const nonEmpty = asArrays.filter(row =>
+          Array.isArray(row) && row.some(cell => String(cell).trim() !== '')
+        )
+
+        console.log('[Raffle] Sheet names:', wb.SheetNames)
+        console.log('[Raffle] Total rows (raw):', asArrays.length)
+        console.log('[Raffle] Non-empty rows:', nonEmpty.length)
+        console.log('[Raffle] First 3 rows:', nonEmpty.slice(0, 3))
+
+        if (nonEmpty.length === 0) {
+          setError(`No data found in sheet "${sheetName}". Check the browser console (F12) for debug info.`)
           return
         }
+
+        if (nonEmpty.length === 1) {
+          setError(`Only the header row was found in "${sheetName}" — no data rows below it.`)
+          return
+        }
+
+        const headers = nonEmpty[0].map((h, i) => ({
+          label: String(h).trim() || `Column ${i + 1}`,
+          index: i,
+        }))
+        const rows = nonEmpty.slice(1)
+
         setWorkbook(wb)
         setSheetNames(wb.SheetNames)
-        setSelectedSheet(sheet)
+        setSelectedSheet(sheetName)
         setHasHeader(true)
         setColumnOptions(headers)
         setDataRows(rows)
@@ -105,11 +131,12 @@ export default function App() {
         setEntries(names)
         setDrawnWinners([])
         setCurrentWinner(null)
-      } catch {
-        setError('Could not read the file. Please upload a valid .xlsx or .xls file.')
+      } catch (err) {
+        console.error('[Raffle] Parse error:', err)
+        setError(`Failed to read the file: ${err.message}`)
       }
     }
-    reader.onerror = () => setError('Failed to read the file.')
+    reader.onerror = (err) => setError(`File read error: ${err}`)
     reader.readAsArrayBuffer(file)
   }
 
