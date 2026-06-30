@@ -32,7 +32,7 @@ export default function AdminPage() {
   const [pinError, setPinError] = useState(false)
 
   // Mode: 'excel' | 'range'
-  const [mode, setMode] = useState('excel')
+  const [mode, setMode] = useState('range')
 
   // Excel state
   const [fileName, setFileName] = useState('')
