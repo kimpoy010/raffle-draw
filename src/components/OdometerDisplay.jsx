@@ -3,9 +3,9 @@ import './OdometerDisplay.css'
 
 const DIGITS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-const CELL_H      = { large: 140,   small: 52    }
-const CELL_W      = { large: 104,   small: 46    }
-const FONT_SIZE   = { large: '86px', small: '34px' }
+const CELL_H      = { large: 180,   small: 52    }
+const CELL_W      = { large: 132,   small: 46    }
+const FONT_SIZE   = { large: '110px', small: '34px' }
 const SPIN_DUR    = { large: '0.4s', small: '0.28s' }
 const ANIM_NAME   = { large: 'od-roll-lg', small: 'od-roll-sm' }
 

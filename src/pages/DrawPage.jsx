@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import confetti from 'canvas-confetti'
 import { subscribeRaffle } from '../lib/raffle.js'
 import OdometerDisplay from '../components/OdometerDisplay.jsx'
 import './DrawPage.css'
@@ -7,26 +8,63 @@ import './DrawPage.css'
 const DRAW_DURATION_MS = 2500
 const TICK_INTERVAL_MS = 60
 
+function launchCelebration() {
+  // Cannon burst from both sides
+  const left  = confetti.create(null, { resize: true, useWorker: true })
+  const right = confetti.create(null, { resize: true, useWorker: true })
+
+  const shared = {
+    particleCount: 120,
+    spread: 70,
+    startVelocity: 55,
+    gravity: 0.9,
+    ticks: 300,
+    colors: ['#a855f7','#ec4899','#f59e0b','#10b981','#3b82f6','#fff'],
+  }
+
+  // Party popper — left cannon
+  left(null, { ...shared, angle: 60,  origin: { x: 0, y: 0.75 } })
+  // Party popper — right cannon
+  right(null, { ...shared, angle: 120, origin: { x: 1, y: 0.75 } })
+
+  // Sustained rain from the top
+  const end = Date.now() + 3000
+  const rain = () => {
+    confetti({
+      particleCount: 6,
+      angle: 270,
+      spread: 120,
+      origin: { x: Math.random(), y: -0.1 },
+      gravity: 1.1,
+      ticks: 200,
+      colors: ['#a855f7','#ec4899','#f59e0b','#10b981','#3b82f6','#fff','#fd8'],
+    })
+    if (Date.now() < end) requestAnimationFrame(rain)
+  }
+  requestAnimationFrame(rain)
+}
+
 export default function DrawPage() {
   const navigate = useNavigate()
 
-  const [entries, setEntries] = useState([])
+  const [entries, setEntries]           = useState([])
   const [drawnWinners, setDrawnWinners] = useState([])
   const [currentWinners, setCurrentWinners] = useState([])
-  const [spinning, setSpinning] = useState(false)
-  const [spinDisplay, setSpinDisplay] = useState('')
-  const [connected, setConnected] = useState(false)
+  const [spinning, setSpinning]         = useState(false)
+  const [spinDisplay, setSpinDisplay]   = useState('')
+  const [connected, setConnected]       = useState(false)
+  const [celebrating, setCelebrating]   = useState(false)
 
-  const tickRef = useRef(null)
+  const tickRef      = useRef(null)
   const lastStartRef = useRef(0)
-  const entriesRef = useRef([])
+  const entriesRef   = useRef([])
 
   useEffect(() => {
     const unsub = subscribeRaffle((data) => {
       setConnected(true)
       if (!data) return
 
-      const config = data.config ?? {}
+      const config     = data.config ?? {}
       const newEntries = config.entries ?? []
       setEntries(newEntries)
       entriesRef.current = newEntries
@@ -38,7 +76,7 @@ export default function DrawPage() {
       if (!draw || draw.state === 'idle') return
       if (draw.state === 'spinning' && draw.startedAt !== lastStartRef.current) {
         lastStartRef.current = draw.startedAt
-        const elapsed = Date.now() - draw.startedAt
+        const elapsed   = Date.now() - draw.startedAt
         const remaining = Math.max(0, DRAW_DURATION_MS - elapsed)
         startLocalSpin(draw.winners, remaining)
       }
@@ -49,6 +87,7 @@ export default function DrawPage() {
   const startLocalSpin = (winners, duration) => {
     clearInterval(tickRef.current)
     setSpinning(true)
+    setCelebrating(false)
     setCurrentWinners([])
     const totalTicks = Math.max(1, Math.floor(duration / TICK_INTERVAL_MS))
     let tick = 0
@@ -61,17 +100,23 @@ export default function DrawPage() {
         setSpinDisplay('')
         setSpinning(false)
         setCurrentWinners(winners)
+        // Delay celebration until odometer finishes settling (6 reels × 500ms + ~1.4s decel)
+        setTimeout(() => {
+          setCelebrating(true)
+          launchCelebration()
+        }, 3200)
       }
     }, TICK_INTERVAL_MS)
   }
 
   const pool = entries.filter(e => !drawnWinners.includes(e))
 
-  // Detect numeric range raffle
   const isNumeric = useMemo(
     () => entries.length > 0 && entries.every(e => /^\d+$/.test(e.trim())),
     [entries]
   )
+
+  const hasWinner = currentWinners.length > 0 && !spinning
 
   return (
     <div className="draw-layout">
@@ -87,11 +132,20 @@ export default function DrawPage() {
 
       <div className="draw-body">
 
+        {/* Party poppers */}
+        {celebrating && (
+          <>
+            <div className="popper popper-left">🎉</div>
+            <div className="popper popper-right">🎉</div>
+          </>
+        )}
+
         {/* Draw stage */}
         <main className="draw-stage">
 
-          <div className={`winner-stage${spinning ? ' is-spinning' : ''}${currentWinners.length && !spinning ? ' has-winner' : ''}`}>
-            {/* Numeric raffle: odometer display */}
+          <div className={`winner-stage${spinning ? ' is-spinning' : ''}${hasWinner ? ' has-winner' : ''}`}>
+
+            {/* Numeric raffle: odometer */}
             {isNumeric && (spinning || currentWinners.length > 0) && (
               <div className="odometer-stage">
                 {spinning && <p className="spin-label">Drawing…</p>}
@@ -115,7 +169,7 @@ export default function DrawPage() {
               </div>
             )}
 
-            {/* Text raffle: standard display */}
+            {/* Text raffle */}
             {!isNumeric && spinning && (
               <div className="spin-box">
                 <p className="spin-label">Drawing…</p>
@@ -129,7 +183,7 @@ export default function DrawPage() {
               </div>
             )}
 
-            {/* Idle state */}
+            {/* Idle */}
             {!spinning && currentWinners.length === 0 && (
               <p className="stage-hint">
                 {entries.length === 0
