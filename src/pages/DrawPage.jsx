@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import confetti from 'canvas-confetti'
 import { subscribeRaffle } from '../lib/raffle.js'
 import OdometerDisplay from '../components/OdometerDisplay.jsx'
+import FallingBalloons from '../components/FallingBalloons.jsx'
 import './DrawPage.css'
 
 const DRAW_DURATION_MS = 2500
@@ -141,9 +142,10 @@ export default function DrawPage() {
 
       <div className="draw-body">
 
-        {/* Party poppers */}
+        {/* Celebration overlays */}
         {celebrating && (
           <>
+            <FallingBalloons />
             <div className="popper popper-left">🎉</div>
             <div className="popper popper-right">🎉</div>
           </>

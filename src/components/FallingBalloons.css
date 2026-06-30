@@ -1,0 +1,34 @@
+.balloons-container {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9;
+  overflow: hidden;
+}
+
+.balloon-wrap {
+  position: absolute;
+  top: -140px;
+  animation: balloon-fall linear both;
+}
+
+.balloon-svg {
+  display: block;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25));
+  animation: balloon-sway-r 2.2s ease-in-out infinite alternate;
+}
+
+@keyframes balloon-fall {
+  from { transform: translateY(0); }
+  to   { transform: translateY(115vh); }
+}
+
+@keyframes balloon-sway-l {
+  from { transform: rotate(-10deg); }
+  to   { transform: rotate(6deg); }
+}
+
+@keyframes balloon-sway-r {
+  from { transform: rotate(8deg); }
+  to   { transform: rotate(-8deg); }
+}
