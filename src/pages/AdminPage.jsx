@@ -17,6 +17,11 @@ function parseSheet(wb, sheetName) {
   return rows.filter(row => Array.isArray(row) && row.some(c => String(c).trim() !== ''))
 }
 
+function generateRange(from, to) {
+  if (isNaN(from) || isNaN(to) || from > to) return []
+  return Array.from({ length: to - from + 1 }, (_, i) => String(from + i))
+}
+
 export default function AdminPage() {
   const navigate = useNavigate()
 
@@ -25,34 +30,47 @@ export default function AdminPage() {
   const [unlocked, setUnlocked] = useState(false)
   const [pinError, setPinError] = useState(false)
 
-  // File / entries state
+  // Mode: 'excel' | 'range'
+  const [mode, setMode] = useState('excel')
+
+  // Excel state
   const [fileName, setFileName] = useState('')
   const [sheetNames, setSheetNames] = useState([])
   const [selectedSheet, setSelectedSheet] = useState('')
   const [columnOptions, setColumnOptions] = useState([])
   const [selectedColumn, setSelectedColumn] = useState(0)
-  const [entries, setEntries] = useState([])
-  const [forcedWinner, setForcedWinner] = useState('')
   const [workbookData, setWorkbookData] = useState(null)
-  const [error, setError] = useState('')
   const [dragOver, setDragOver] = useState(false)
-  const [search, setSearch] = useState('')
   const fileRef = useRef(null)
 
-  // Live raffle state from Firebase
+  // Range state
+  const [rangeFrom, setRangeFrom] = useState(1)
+  const [rangeTo, setRangeTo] = useState(100)
+  const [forcedWinnerNum, setForcedWinnerNum] = useState('')
+
+  // Shared entries / winner state
+  const [entries, setEntries] = useState([])
+  const [forcedWinner, setForcedWinner] = useState('')
+  const entriesRef = useRef([])
+
+  // UI state
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  // Live Firebase state
   const [drawnWinners, setDrawnWinners] = useState([])
-  const [drawState, setDrawState] = useState('idle')
   const [currentWinners, setCurrentWinners] = useState([])
   const [spinning, setSpinning] = useState(false)
   const [spinDisplay, setSpinDisplay] = useState('')
   const tickRef = useRef(null)
   const lastStartRef = useRef(0)
 
-  // Saving state
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  // Danger zone
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [clearing, setClearing] = useState(false)
 
-  // Subscribe to Firebase on mount
   useEffect(() => {
     if (!unlocked) return
     const unsub = subscribeRaffle((data) => {
@@ -61,18 +79,19 @@ export default function AdminPage() {
       setDrawnWinners(Array.isArray(drawn) ? drawn : Object.values(drawn))
 
       if (data.config) {
-        setEntries(prev => prev.length ? prev : (data.config.entries ?? []))
-        setForcedWinner(prev => prev || (data.config.forcedWinner ?? ''))
+        if (!entriesRef.current.length) {
+          const loaded = data.config.entries ?? []
+          setEntries(loaded)
+          entriesRef.current = loaded
+        }
       }
 
       const draw = data.draw
       if (!draw || draw.state === 'idle') return
-
       if (draw.state === 'spinning' && draw.startedAt !== lastStartRef.current) {
         lastStartRef.current = draw.startedAt
         const elapsed = Date.now() - draw.startedAt
-        const remaining = Math.max(0, DRAW_DURATION_MS - elapsed)
-        startLocalSpin(draw.winners, remaining)
+        startLocalSpin(draw.winners, Math.max(0, DRAW_DURATION_MS - elapsed))
       }
     })
     return unsub
@@ -87,7 +106,8 @@ export default function AdminPage() {
     const totalTicks = Math.max(1, Math.floor(duration / TICK_INTERVAL_MS))
     let tick = 0
     tickRef.current = setInterval(() => {
-      setSpinDisplay(entries[Math.floor(Math.random() * entries.length)] ?? '…')
+      const pool = entriesRef.current
+      setSpinDisplay(pool[Math.floor(Math.random() * pool.length)] ?? '…')
       tick++
       if (tick >= totalTicks) {
         clearInterval(tickRef.current)
@@ -98,26 +118,32 @@ export default function AdminPage() {
     }, TICK_INTERVAL_MS)
   }
 
-  // PIN submit
+  // PIN
   const handlePin = (e) => {
     e.preventDefault()
     if (pinInput === ADMIN_PIN) { setUnlocked(true); setPinError(false) }
     else { setPinError(true) }
   }
 
-  // File parsing
+  // Mode switch — reset entries
+  const switchMode = (m) => {
+    setMode(m)
+    setEntries([]); entriesRef.current = []
+    setForcedWinner(''); setForcedWinnerNum('')
+    setFileName(''); setWorkbookData(null)
+    setSaved(false); setError('')
+  }
+
+  // Excel parsing
   const applyColumn = (wb, sheet, colIndex) => {
     const rows = parseSheet(wb, sheet)
     const names = rows.slice(1).map(r => String(r[colIndex] ?? '').trim()).filter(Boolean)
-    setEntries(names)
-    setForcedWinner('')
-    setSaved(false)
-    return names
+    setEntries(names); entriesRef.current = names
+    setForcedWinner(''); setSaved(false)
   }
 
   const readFile = (file) => {
-    setError('')
-    setSaved(false)
+    setError(''); setSaved(false)
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
@@ -130,7 +156,8 @@ export default function AdminPage() {
         const cols = rows[0].map((h, i) => ({ label: String(h).trim() || `Column ${i + 1}`, index: i }))
         const names = rows.slice(1).map(r => String(r[0] ?? '').trim()).filter(Boolean)
         setWorkbookData(wb); setSheetNames(wb.SheetNames); setSelectedSheet(sheet)
-        setColumnOptions(cols); setSelectedColumn(0); setEntries(names)
+        setColumnOptions(cols); setSelectedColumn(0)
+        setEntries(names); entriesRef.current = names
         setFileName(file.name); setForcedWinner('')
       } catch (err) {
         console.error('[Admin] Parse error:', err)
@@ -147,16 +174,27 @@ export default function AdminPage() {
     if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0])
   }, [])
 
-  const handleSheetChange = (sheet) => {
-    setSelectedSheet(sheet); setSelectedColumn(0)
-    if (workbookData) applyColumn(workbookData, sheet, 0)
+  // Range generation
+  const rangeCount = (!isNaN(rangeFrom) && !isNaN(rangeTo) && rangeTo >= rangeFrom)
+    ? rangeTo - rangeFrom + 1 : 0
+
+  const handleGenerateRange = () => {
+    const nums = generateRange(Number(rangeFrom), Number(rangeTo))
+    if (!nums.length) { setError('Invalid range. Make sure "From" is less than or equal to "To".'); return }
+    setError('')
+    setEntries(nums); entriesRef.current = nums
+    setForcedWinner(''); setForcedWinnerNum(''); setSaved(false)
   }
 
-  const handleColumnChange = (idx) => {
-    setSelectedColumn(idx)
-    if (workbookData) applyColumn(workbookData, selectedSheet, idx)
+  const handleForcedWinnerNumChange = (val) => {
+    setForcedWinnerNum(val)
+    const num = Number(val)
+    if (val === '' || isNaN(num)) { setForcedWinner(''); return }
+    const str = String(num)
+    setForcedWinner(entries.includes(str) ? str : '')
   }
 
+  // Save
   const handleSave = async () => {
     if (!entries.length) { setError('No entries to save.'); return }
     setSaving(true)
@@ -174,6 +212,7 @@ export default function AdminPage() {
 
   const pool = entries.filter(e => !drawnWinners.includes(e))
 
+  // Draw
   const handleDraw = async () => {
     if (spinning || pool.length === 0) return
     const winners = forcedWinner && pool.includes(forcedWinner)
@@ -181,8 +220,6 @@ export default function AdminPage() {
       : [pool[Math.floor(Math.random() * pool.length)]]
     try {
       await triggerDraw(winners)
-      // Add to the drawn list only after the animation finishes so the
-      // winner doesn't appear in Previous Winners before the reveal.
       setTimeout(() => addDrawnWinners(winners), DRAW_DURATION_MS + 3000)
     } catch (err) {
       setError(`Draw failed: ${err.message}`)
@@ -210,17 +247,16 @@ export default function AdminPage() {
     }
   }
 
-  const [confirmClear, setConfirmClear] = useState(false)
-  const [clearing, setClearing] = useState(false)
-
   const handleClearRaffle = async () => {
     if (!confirmClear) { setConfirmClear(true); return }
     setClearing(true)
     try {
       await clearRaffle()
-      setEntries([]); setFileName(''); setWorkbookData(null)
+      setEntries([]); entriesRef.current = []
+      setFileName(''); setWorkbookData(null)
       setColumnOptions([]); setSheetNames([]); setSelectedSheet('')
-      setForcedWinner(''); setSaved(false); setCurrentWinners([])
+      setForcedWinner(''); setForcedWinnerNum('')
+      setSaved(false); setCurrentWinners([])
       setDrawnWinners([]); setConfirmClear(false)
       if (fileRef.current) fileRef.current.value = ''
     } catch (err) {
@@ -231,6 +267,12 @@ export default function AdminPage() {
   }
 
   const filteredEntries = entries.filter(e => e.toLowerCase().includes(search.toLowerCase()))
+
+  // Validate forced number winner
+  const numWinnerInRange = forcedWinnerNum !== '' &&
+    !isNaN(Number(forcedWinnerNum)) &&
+    entries.includes(String(Number(forcedWinnerNum))) &&
+    pool.includes(String(Number(forcedWinnerNum)))
 
   // PIN screen
   if (!unlocked) {
@@ -268,83 +310,174 @@ export default function AdminPage() {
 
       <main className="admin-main">
 
-        {/* Upload */}
+        {/* Step 1 — Source */}
         <section className="admin-card">
-          <h2>1. Upload Excel File</h2>
-          {!fileName ? (
-            <div
-              className={`drop-zone${dragOver ? ' drag-over' : ''}`}
-              onDrop={handleDrop}
-              onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-              onDragLeave={() => setDragOver(false)}
-              onClick={() => fileRef.current.click()}
-              role="button" tabIndex={0}
-              onKeyDown={e => e.key === 'Enter' && fileRef.current.click()}
-            >
-              <div className="drop-icon">📂</div>
-              <p className="drop-title">Drag & drop or click to upload</p>
-              <p className="drop-hint">Supports .xlsx and .xls</p>
-              <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFileChange} className="sr-only" />
-            </div>
-          ) : (
-            <div className="loaded-bar">
-              <span>📄</span>
-              <span className="loaded-name">{fileName}</span>
-              <button className="btn-ghost" onClick={() => { setFileName(''); setEntries([]); setWorkbookData(null) }}>Change</button>
-            </div>
-          )}
-          {error && <p className="error-msg">{error}</p>}
-        </section>
+          <h2>1. Raffle Entries</h2>
 
-        {/* Configure */}
-        {entries.length > 0 && (
-          <section className="admin-card">
-            <h2>2. Configure</h2>
-            <div className="config-grid">
-              {sheetNames.length > 1 && (
-                <div className="config-row">
+          {/* Mode tabs */}
+          <div className="mode-tabs">
+            <button
+              className={`mode-tab${mode === 'excel' ? ' active' : ''}`}
+              onClick={() => switchMode('excel')}
+            >
+              📂 Excel File
+            </button>
+            <button
+              className={`mode-tab${mode === 'range' ? ' active' : ''}`}
+              onClick={() => switchMode('range')}
+            >
+              🔢 Number Range
+            </button>
+          </div>
+
+          {/* Excel mode */}
+          {mode === 'excel' && (
+            <>
+              {!fileName ? (
+                <div
+                  className={`drop-zone${dragOver ? ' drag-over' : ''}`}
+                  onDrop={handleDrop}
+                  onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+                  onDragLeave={() => setDragOver(false)}
+                  onClick={() => fileRef.current.click()}
+                  role="button" tabIndex={0}
+                  onKeyDown={e => e.key === 'Enter' && fileRef.current.click()}
+                >
+                  <div className="drop-icon">📂</div>
+                  <p className="drop-title">Drag & drop or click to upload</p>
+                  <p className="drop-hint">Supports .xlsx and .xls</p>
+                  <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFileChange} className="sr-only" />
+                </div>
+              ) : (
+                <div className="loaded-bar">
+                  <span>📄</span>
+                  <span className="loaded-name">{fileName}</span>
+                  <button className="btn-ghost" onClick={() => { setFileName(''); setEntries([]); entriesRef.current = []; setWorkbookData(null) }}>Change</button>
+                </div>
+              )}
+
+              {entries.length > 0 && sheetNames.length > 1 && (
+                <div className="config-row" style={{ marginTop: 14 }}>
                   <label>Sheet</label>
-                  <select value={selectedSheet} onChange={e => handleSheetChange(e.target.value)}>
+                  <select value={selectedSheet} onChange={e => { setSelectedSheet(e.target.value); setSelectedColumn(0); if (workbookData) applyColumn(workbookData, e.target.value, 0) }}>
                     {sheetNames.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
               )}
-              <div className="config-row">
-                <label>Name column</label>
-                <select value={selectedColumn} onChange={e => handleColumnChange(Number(e.target.value))}>
-                  {columnOptions.map(o => <option key={o.index} value={o.index}>{o.label}</option>)}
-                </select>
-              </div>
-            </div>
-            <p className="entry-count">{entries.length} entries loaded</p>
-            <button className="btn-save" onClick={handleSave} disabled={saving || saved} style={{ marginTop: 16 }}>
-              {saving ? 'Saving…' : saved ? '✓ Saved to Firebase' : '☁️ Save Entries to Firebase'}
-            </button>
-          </section>
-        )}
+              {entries.length > 0 && (
+                <div className="config-row" style={{ marginTop: 10 }}>
+                  <label>Name column</label>
+                  <select value={selectedColumn} onChange={e => { const idx = Number(e.target.value); setSelectedColumn(idx); if (workbookData) applyColumn(workbookData, selectedSheet, idx) }}>
+                    {columnOptions.map(o => <option key={o.index} value={o.index}>{o.label}</option>)}
+                  </select>
+                </div>
+              )}
+            </>
+          )}
 
-        {/* Pre-select winner */}
+          {/* Range mode */}
+          {mode === 'range' && (
+            <div className="range-section">
+              <div className="range-inputs">
+                <div className="range-field">
+                  <label htmlFor="range-from">From</label>
+                  <input
+                    id="range-from"
+                    type="number"
+                    value={rangeFrom}
+                    onChange={e => { setRangeFrom(e.target.value); setSaved(false) }}
+                    className="range-input"
+                    min={0}
+                  />
+                </div>
+                <span className="range-dash">—</span>
+                <div className="range-field">
+                  <label htmlFor="range-to">To</label>
+                  <input
+                    id="range-to"
+                    type="number"
+                    value={rangeTo}
+                    onChange={e => { setRangeTo(e.target.value); setSaved(false) }}
+                    className="range-input"
+                    min={0}
+                  />
+                </div>
+                <button className="btn-generate" onClick={handleGenerateRange} disabled={rangeCount <= 0}>
+                  Generate
+                </button>
+              </div>
+              {rangeCount > 0 && (
+                <p className="range-preview">
+                  Will generate <strong>{rangeCount.toLocaleString()}</strong> numbers
+                  ({rangeFrom} to {rangeTo})
+                </p>
+              )}
+            </div>
+          )}
+
+          {error && <p className="error-msg">{error}</p>}
+
+          {entries.length > 0 && (
+            <>
+              <p className="entry-count" style={{ marginTop: 14 }}>{entries.length.toLocaleString()} entries loaded</p>
+              <button className="btn-save" onClick={handleSave} disabled={saving || saved} style={{ marginTop: 12 }}>
+                {saving ? 'Saving…' : saved ? '✓ Saved to Firebase' : '☁️ Save to Firebase'}
+              </button>
+            </>
+          )}
+        </section>
+
+        {/* Step 2 — Pre-select winner */}
         {saved && entries.length > 0 && (
           <section className="admin-card">
-            <h2>3. Pre-select Winner <span className="optional-tag">optional</span></h2>
+            <h2>2. Pre-select Winner <span className="optional-tag">optional</span></h2>
             <p className="section-sub">Choose a specific entry that will be drawn, or leave blank for random.</p>
-            <div className="config-row">
-              <label>Winner</label>
-              <select value={forcedWinner} onChange={e => setForcedWinner(e.target.value)}>
-                <option value="">— Random —</option>
-                {pool.map((e, i) => <option key={i} value={e}>{e}</option>)}
-              </select>
-            </div>
+
+            {mode === 'excel' ? (
+              <div className="config-row">
+                <label>Winner</label>
+                <select value={forcedWinner} onChange={e => setForcedWinner(e.target.value)}>
+                  <option value="">— Random —</option>
+                  {pool.map((e, i) => <option key={i} value={e}>{e}</option>)}
+                </select>
+              </div>
+            ) : (
+              <div className="range-winner-row">
+                <div className="config-row">
+                  <label>Winner #</label>
+                  <input
+                    type="number"
+                    className="range-input"
+                    placeholder={`${rangeFrom} – ${rangeTo}`}
+                    value={forcedWinnerNum}
+                    min={rangeFrom}
+                    max={rangeTo}
+                    onChange={e => handleForcedWinnerNumChange(e.target.value)}
+                  />
+                  {forcedWinnerNum !== '' && (
+                    <button className="btn-ghost" onClick={() => { setForcedWinnerNum(''); setForcedWinner('') }}>
+                      ✕ Clear
+                    </button>
+                  )}
+                </div>
+                {forcedWinnerNum !== '' && !numWinnerInRange && (
+                  <p className="range-warn">
+                    Number must be between {rangeFrom} and {rangeTo} and not already drawn.
+                  </p>
+                )}
+              </div>
+            )}
+
             {forcedWinner && (
               <p className="forced-notice">🎯 <strong>{forcedWinner}</strong> will be drawn.</p>
             )}
           </section>
         )}
 
-        {/* Draw control */}
+        {/* Step 3 — Control draw */}
         {saved && entries.length > 0 && (
           <section className="admin-card">
-            <h2>4. Control Draw</h2>
+            <h2>3. Control Draw</h2>
 
             <div className={`mini-stage${spinning ? ' is-spinning' : ''}${currentWinners.length && !spinning ? ' has-winner' : ''}`}>
               {spinning && <p className="spin-name">{spinDisplay}</p>}
@@ -372,7 +505,7 @@ export default function AdminPage() {
             </div>
 
             <div className="mini-stats">
-              <div className="mini-stat"><strong>{pool.length}</strong><span>Remaining</span></div>
+              <div className="mini-stat"><strong>{pool.length.toLocaleString()}</strong><span>Remaining</span></div>
               <div className="mini-stat"><strong>{drawnWinners.length}</strong><span>Drawn</span></div>
             </div>
 
@@ -403,7 +536,12 @@ export default function AdminPage() {
                 <span
                   key={i}
                   className={`entry-chip${entry === forcedWinner ? ' forced' : ''}${drawnWinners.includes(entry) ? ' drawn' : ''}`}
-                  onClick={() => setForcedWinner(prev => prev === entry ? '' : entry)}
+                  onClick={() => {
+                    if (drawnWinners.includes(entry)) return
+                    const next = forcedWinner === entry ? '' : entry
+                    setForcedWinner(next)
+                    if (mode === 'range') setForcedWinnerNum(next)
+                  }}
                   title={drawnWinners.includes(entry) ? 'Already drawn' : entry === forcedWinner ? 'Click to unselect' : 'Click to pre-select'}
                 >
                   {entry}
@@ -413,6 +551,7 @@ export default function AdminPage() {
             {search && <p className="search-count">{filteredEntries.length} of {entries.length} shown</p>}
           </section>
         )}
+
         {/* New Raffle */}
         <section className="admin-card danger-card">
           <h2>Start New Raffle</h2>

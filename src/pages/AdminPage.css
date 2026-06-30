@@ -39,6 +39,115 @@
   75%       { transform: translateX(4px); }
 }
 
+/* Mode tabs */
+.mode-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 18px;
+  background: var(--code-bg);
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.mode-tab {
+  flex: 1;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  font-family: var(--sans);
+}
+
+.mode-tab:hover { color: var(--text-h); }
+
+.mode-tab.active {
+  background: var(--bg);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+
+/* Number range inputs */
+.range-section { display: flex; flex-direction: column; gap: 10px; }
+
+.range-inputs {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.range-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.range-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.range-input {
+  width: 120px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 15px;
+  font-family: var(--mono);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.range-input:focus { border-color: var(--accent); }
+
+.range-dash {
+  font-size: 20px;
+  color: var(--text);
+  padding-bottom: 8px;
+}
+
+.btn-generate {
+  padding: 9px 20px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--sans);
+  transition: opacity 0.2s;
+  align-self: flex-end;
+  margin-bottom: 1px;
+}
+
+.btn-generate:hover:not(:disabled) { opacity: 0.85; }
+.btn-generate:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.range-preview {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.range-winner-row { display: flex; flex-direction: column; gap: 8px; }
+
+.range-warn {
+  font-size: 13px;
+  color: #d97706;
+  margin-top: 4px;
+}
+
 /* PIN screen */
 .pin-screen {
   min-height: 100svh;
