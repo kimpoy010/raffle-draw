@@ -15,7 +15,7 @@ function launchCelebration() {
   const right = confetti.create(null, { resize: true, useWorker: true })
 
   const shared = {
-    particleCount: 120,
+    particleCount: 90,
     spread: 70,
     startVelocity: 55,
     gravity: 0.7,
@@ -32,7 +32,7 @@ function launchCelebration() {
   const end = Date.now() + 6000
   const rain = () => {
     confetti({
-      particleCount: 6,
+      particleCount: 4,
       angle: 270,
       spread: 120,
       origin: { x: Math.random(), y: -0.1 },
