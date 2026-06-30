@@ -1,13 +1,3 @@
-/* Roll animations — one per cell size so keyframe pixels are hardcoded */
-@keyframes od-roll-lg {
-  from { transform: translateY(0); }
-  to   { transform: translateY(-960px); } /* 10 × 96px */
-}
-
-@keyframes od-roll-sm {
-  from { transform: translateY(0); }
-  to   { transform: translateY(-520px); } /* 10 × 52px */
-}
 
 .odometer {
   display: flex;
