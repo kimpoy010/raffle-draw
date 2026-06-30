@@ -72,10 +72,6 @@ export default function DrawPage() {
     () => entries.length > 0 && entries.every(e => /^\d+$/.test(e.trim())),
     [entries]
   )
-  const maxNumLen = useMemo(
-    () => isNumeric ? Math.max(...entries.map(e => e.length)) : 0,
-    [isNumeric, entries]
-  )
 
   return (
     <div className="draw-layout">
@@ -124,7 +120,6 @@ export default function DrawPage() {
                 <OdometerDisplay
                   value={spinning ? (spinDisplay || entries[0]) : currentWinners[0]}
                   spinning={spinning}
-                  maxLen={maxNumLen}
                   size="large"
                 />
                 {!spinning && currentWinners.length > 1 && (

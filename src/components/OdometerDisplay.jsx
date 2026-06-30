@@ -75,9 +75,13 @@ function OdometerReel({ digit, spinning, settleDelay, size }) {
   )
 }
 
-export default function OdometerDisplay({ value, spinning, maxLen, size = 'large' }) {
-  const str = String(value ?? '0').padStart(maxLen ?? 1, '0')
-  const digits = str.split('').map(Number)
+const FIXED_BOXES = 6
+const SETTLE_INTERVAL_MS = 400 // gap between each box settling
+
+export default function OdometerDisplay({ value, spinning, size = 'large' }) {
+  // Always 6 boxes, padded with leading zeros
+  const str = String(value ?? '0').padStart(FIXED_BOXES, '0')
+  const digits = str.slice(-FIXED_BOXES).split('').map(Number)
   const gap = size === 'small' ? 4 : 6
 
   return (
@@ -88,8 +92,8 @@ export default function OdometerDisplay({ value, spinning, maxLen, size = 'large
           digit={d}
           spinning={spinning}
           size={size}
-          // rightmost digit settles first, cascade left
-          settleDelay={spinning ? 0 : (digits.length - 1 - i) * 130}
+          // Left-to-right reveal: first box stops first, last box stops last
+          settleDelay={spinning ? 0 : i * SETTLE_INTERVAL_MS}
         />
       ))}
     </div>

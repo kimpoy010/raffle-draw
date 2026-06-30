@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import {
@@ -269,11 +269,6 @@ export default function AdminPage() {
 
   const filteredEntries = entries.filter(e => e.toLowerCase().includes(search.toLowerCase()))
 
-  const maxNumLen = useMemo(
-    () => mode === 'range' ? String(rangeTo).length : 0,
-    [mode, rangeTo]
-  )
-
   // Validate forced number winner
   const numWinnerInRange = forcedWinnerNum !== '' &&
     !isNaN(Number(forcedWinnerNum)) &&
@@ -496,7 +491,6 @@ export default function AdminPage() {
                   <OdometerDisplay
                     value={spinning ? (spinDisplay || entries[0]) : currentWinners[0]}
                     spinning={spinning}
-                    maxLen={maxNumLen}
                     size="small"
                   />
                 </div>
