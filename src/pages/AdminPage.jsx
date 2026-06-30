@@ -8,7 +8,7 @@ import {
 import OdometerDisplay from '../components/OdometerDisplay.jsx'
 import './AdminPage.css'
 
-const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN ?? '1234'
+const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN ?? '0609'
 const DRAW_DURATION_MS = 2500
 const TICK_INTERVAL_MS = 60
 
