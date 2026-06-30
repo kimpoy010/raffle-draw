@@ -114,7 +114,7 @@ function OdometerReel({ digit, spinning, settleDelay, size, onSettled }) {
 }
 
 const FIXED_BOXES        = 6
-const SETTLE_INTERVAL_MS = 500   // gap between each reel starting to slow down
+const SETTLE_INTERVAL_MS = 3000  // gap between each reel starting to slow down
 
 export default function OdometerDisplay({ value, spinning, size = 'large', onSettled }) {
   const str    = String(value ?? '0').padStart(FIXED_BOXES, '0')
