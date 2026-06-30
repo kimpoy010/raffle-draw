@@ -1,0 +1,70 @@
+/* Roll animations — one per cell size so keyframe pixels are hardcoded */
+@keyframes od-roll-lg {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-960px); } /* 10 × 96px */
+}
+
+@keyframes od-roll-sm {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-520px); } /* 10 × 52px */
+}
+
+.odometer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Each digit column */
+.od-reel {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    inset 0 3px 10px rgba(0, 0, 0, 0.5),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+}
+
+/* Gradient masks give the reel depth */
+.od-mask {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.od-mask--top {
+  top: 0;
+  height: 38%;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.85), transparent);
+}
+
+.od-mask--bottom {
+  bottom: 0;
+  height: 38%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
+}
+
+/* The scrolling strip */
+.od-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  will-change: transform;
+}
+
+/* Individual digit spans */
+.od-digit {
+  display: block;
+  width: 100%;
+  text-align: center;
+  font-weight: 900;
+  color: #fff;
+  font-family: var(--mono);
+  user-select: none;
+}

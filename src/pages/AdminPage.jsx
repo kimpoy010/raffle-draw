@@ -1,10 +1,11 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import {
   saveRaffleConfig, triggerDraw, addDrawnWinners,
   removeDrawnWinners, resetDrawnWinners, setDrawIdle, subscribeRaffle, clearRaffle,
 } from '../lib/raffle.js'
+import OdometerDisplay from '../components/OdometerDisplay.jsx'
 import './AdminPage.css'
 
 const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN ?? '1234'
@@ -268,6 +269,11 @@ export default function AdminPage() {
 
   const filteredEntries = entries.filter(e => e.toLowerCase().includes(search.toLowerCase()))
 
+  const maxNumLen = useMemo(
+    () => mode === 'range' ? String(rangeTo).length : 0,
+    [mode, rangeTo]
+  )
+
   // Validate forced number winner
   const numWinnerInRange = forcedWinnerNum !== '' &&
     !isNaN(Number(forcedWinnerNum)) &&
@@ -480,8 +486,24 @@ export default function AdminPage() {
             <h2>3. Control Draw</h2>
 
             <div className={`mini-stage${spinning ? ' is-spinning' : ''}${currentWinners.length && !spinning ? ' has-winner' : ''}`}>
-              {spinning && <p className="spin-name">{spinDisplay}</p>}
-              {!spinning && currentWinners.length > 0 && (
+              {/* Numeric: odometer */}
+              {mode === 'range' && (spinning || currentWinners.length > 0) && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                  {spinning && <p className="spin-name" style={{ fontSize: 13, marginBottom: 4 }}>Drawing…</p>}
+                  {!spinning && currentWinners.length > 0 && (
+                    <p className="winner-label">🎉 {currentWinners.length === 1 ? 'Winner' : 'Winners'}!</p>
+                  )}
+                  <OdometerDisplay
+                    value={spinning ? (spinDisplay || entries[0]) : currentWinners[0]}
+                    spinning={spinning}
+                    maxLen={maxNumLen}
+                    size="small"
+                  />
+                </div>
+              )}
+              {/* Text: standard */}
+              {mode === 'excel' && spinning && <p className="spin-name">{spinDisplay}</p>}
+              {mode === 'excel' && !spinning && currentWinners.length > 0 && (
                 <>
                   <p className="winner-label">🎉 {currentWinners.length === 1 ? 'Winner' : 'Winners'}!</p>
                   {currentWinners.map((w, i) => <p key={i} className="winner-name">{w}</p>)}

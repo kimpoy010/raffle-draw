@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { subscribeRaffle } from '../lib/raffle.js'
+import OdometerDisplay from '../components/OdometerDisplay.jsx'
 import './DrawPage.css'
 
 const DRAW_DURATION_MS = 2500
@@ -66,6 +67,16 @@ export default function DrawPage() {
 
   const pool = entries.filter(e => !drawnWinners.includes(e))
 
+  // Detect numeric range raffle
+  const isNumeric = useMemo(
+    () => entries.length > 0 && entries.every(e => /^\d+$/.test(e.trim())),
+    [entries]
+  )
+  const maxNumLen = useMemo(
+    () => isNumeric ? Math.max(...entries.map(e => e.length)) : 0,
+    [isNumeric, entries]
+  )
+
   return (
     <div className="draw-layout">
       <header className="draw-header">
@@ -101,18 +112,46 @@ export default function DrawPage() {
         <main className="draw-stage">
 
           <div className={`winner-stage${spinning ? ' is-spinning' : ''}${currentWinners.length && !spinning ? ' has-winner' : ''}`}>
-            {spinning && (
+            {/* Numeric raffle: odometer display */}
+            {isNumeric && (spinning || currentWinners.length > 0) && (
+              <div className="odometer-stage">
+                {spinning && <p className="spin-label">Drawing…</p>}
+                {!spinning && currentWinners.length > 0 && (
+                  <p className="winner-label">
+                    {currentWinners.length === 1 ? '🎉 Winner!' : '🎉 Winners!'}
+                  </p>
+                )}
+                <OdometerDisplay
+                  value={spinning ? (spinDisplay || entries[0]) : currentWinners[0]}
+                  spinning={spinning}
+                  maxLen={maxNumLen}
+                  size="large"
+                />
+                {!spinning && currentWinners.length > 1 && (
+                  <div className="extra-winners">
+                    {currentWinners.slice(1).map((w, i) => (
+                      <p key={i} className="winner-name">{w}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Text raffle: standard display */}
+            {!isNumeric && spinning && (
               <div className="spin-box">
                 <p className="spin-label">Drawing…</p>
                 <p className="spin-name">{spinDisplay}</p>
               </div>
             )}
-            {!spinning && currentWinners.length > 0 && (
+            {!isNumeric && !spinning && currentWinners.length > 0 && (
               <div className="winner-box">
                 <p className="winner-label">{currentWinners.length === 1 ? '🎉 Winner!' : '🎉 Winners!'}</p>
                 {currentWinners.map((w, i) => <p key={i} className="winner-name">{w}</p>)}
               </div>
             )}
+
+            {/* Idle state */}
             {!spinning && currentWinners.length === 0 && (
               <p className="stage-hint">
                 {entries.length === 0

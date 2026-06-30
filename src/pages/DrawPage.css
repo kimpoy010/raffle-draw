@@ -167,6 +167,23 @@
   font-size: 17px;
 }
 
+/* Odometer wrapper inside the stage */
+.odometer-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.extra-winners {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
 /* Spin */
 .spin-box { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .spin-label {
