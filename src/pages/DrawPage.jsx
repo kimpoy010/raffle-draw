@@ -88,22 +88,6 @@ export default function DrawPage() {
 
       <div className="draw-body">
 
-        {/* Entries sidebar */}
-        <aside className="entries-sidebar">
-          <h2>Entries <span className="sidebar-count">{entries.length}</span></h2>
-          {entries.length === 0 ? (
-            <p className="sidebar-empty">Waiting for admin to load entries…</p>
-          ) : (
-            <div className="entries-scroll">
-              {entries.map((entry, i) => (
-                <div key={i} className={`sidebar-entry${drawnWinners.includes(entry) ? ' drawn' : ''}`}>
-                  {entry}
-                </div>
-              ))}
-            </div>
-          )}
-        </aside>
-
         {/* Draw stage */}
         <main className="draw-stage">
 
