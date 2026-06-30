@@ -1,3 +1,13 @@
+/* Continuous upward roll — one cycle = strip scrolls through all 10 digits */
+@keyframes od-roll-lg {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-960px); } /* 10 × 96px */
+}
+
+@keyframes od-roll-sm {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-520px); } /* 10 × 52px */
+}
 
 .odometer {
   display: flex;
