@@ -4,13 +4,13 @@ import { getDatabase } from 'firebase/database'
 // Replace these values with your Firebase project config.
 // Get them from: Firebase Console → Project Settings → Your apps → SDK setup
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: 'AIzaSyBVzNvmflJ3fNuw9RJI4W87ivs3tUkZ564',
+  authDomain: 'raffle-draw-84ade.firebaseapp.com',
+  databaseURL: 'https://raffle-draw-84ade-default-rtdb.asia-southeast1.firebasedatabase.app',
+  projectId: 'raffle-draw-84ade',
+  storageBucket: 'raffle-draw-84ade.firebasestorage.app',
+  messagingSenderId: '793468971257',
+  appId: '1:793468971257:web:de1fae71d670018a209a28',
 }
 
 const app = initializeApp(firebaseConfig)
