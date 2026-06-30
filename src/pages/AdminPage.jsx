@@ -1,47 +1,117 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
-import { saveConfig, loadConfig, clearConfig } from '../lib/store.js'
+import {
+  saveRaffleConfig, triggerDraw, addDrawnWinners,
+  removeDrawnWinners, resetDrawnWinners, setDrawIdle, subscribeRaffle,
+} from '../lib/raffle.js'
 import './AdminPage.css'
+
+const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN ?? '1234'
+const DRAW_DURATION_MS = 2500
+const TICK_INTERVAL_MS = 60
 
 function parseSheet(wb, sheetName) {
   const sheet = wb.Sheets[sheetName]
-  const asArrays = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false })
-  const nonEmpty = asArrays.filter(row =>
-    Array.isArray(row) && row.some(cell => String(cell).trim() !== '')
-  )
-  return nonEmpty
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false })
+  return rows.filter(row => Array.isArray(row) && row.some(c => String(c).trim() !== ''))
 }
 
 export default function AdminPage() {
   const navigate = useNavigate()
-  const existing = loadConfig()
 
-  const [fileName, setFileName] = useState(existing?.fileName ?? '')
-  const [sheetNames, setSheetNames] = useState(existing?.sheetNames ?? [])
-  const [selectedSheet, setSelectedSheet] = useState(existing?.selectedSheet ?? '')
-  const [columnOptions, setColumnOptions] = useState(existing?.columnOptions ?? [])
-  const [selectedColumn, setSelectedColumn] = useState(existing?.selectedColumn ?? 0)
-  const [entries, setEntries] = useState(existing?.entries ?? [])
-  const [forcedWinner, setForcedWinner] = useState(existing?.forcedWinner ?? '')
+  // PIN gate
+  const [pinInput, setPinInput] = useState('')
+  const [unlocked, setUnlocked] = useState(false)
+  const [pinError, setPinError] = useState(false)
+
+  // File / entries state
+  const [fileName, setFileName] = useState('')
+  const [sheetNames, setSheetNames] = useState([])
+  const [selectedSheet, setSelectedSheet] = useState('')
+  const [columnOptions, setColumnOptions] = useState([])
+  const [selectedColumn, setSelectedColumn] = useState(0)
+  const [entries, setEntries] = useState([])
+  const [forcedWinner, setForcedWinner] = useState('')
   const [workbookData, setWorkbookData] = useState(null)
   const [error, setError] = useState('')
-  const [saved, setSaved] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [search, setSearch] = useState('')
   const fileRef = useRef(null)
 
-  const applySheet = (wb, sheetName, colIndex) => {
-    const rows = parseSheet(wb, sheetName)
-    if (rows.length < 2) return []
-    const cols = rows[0].map((h, i) => ({
-      label: String(h).trim() || `Column ${i + 1}`,
-      index: i,
-    }))
-    setColumnOptions(cols)
+  // Live raffle state from Firebase
+  const [drawnWinners, setDrawnWinners] = useState([])
+  const [drawState, setDrawState] = useState('idle')
+  const [currentWinners, setCurrentWinners] = useState([])
+  const [spinning, setSpinning] = useState(false)
+  const [spinDisplay, setSpinDisplay] = useState('')
+  const tickRef = useRef(null)
+  const lastStartRef = useRef(0)
+
+  // Saving state
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  // Subscribe to Firebase on mount
+  useEffect(() => {
+    if (!unlocked) return
+    const unsub = subscribeRaffle((data) => {
+      if (!data) return
+      const drawn = data.drawnWinners ?? []
+      setDrawnWinners(Array.isArray(drawn) ? drawn : Object.values(drawn))
+
+      if (data.config) {
+        setEntries(prev => prev.length ? prev : (data.config.entries ?? []))
+        setForcedWinner(prev => prev || (data.config.forcedWinner ?? ''))
+      }
+
+      const draw = data.draw
+      if (!draw || draw.state === 'idle') return
+
+      if (draw.state === 'spinning' && draw.startedAt !== lastStartRef.current) {
+        lastStartRef.current = draw.startedAt
+        const elapsed = Date.now() - draw.startedAt
+        const remaining = Math.max(0, DRAW_DURATION_MS - elapsed)
+        startLocalSpin(draw.winners, remaining)
+      }
+    })
+    return unsub
+  }, [unlocked])
+
+  useEffect(() => () => clearInterval(tickRef.current), [])
+
+  const startLocalSpin = (winners, duration) => {
+    clearInterval(tickRef.current)
+    setSpinning(true)
+    setCurrentWinners([])
+    const totalTicks = Math.max(1, Math.floor(duration / TICK_INTERVAL_MS))
+    let tick = 0
+    tickRef.current = setInterval(() => {
+      setSpinDisplay(entries[Math.floor(Math.random() * entries.length)] ?? '…')
+      tick++
+      if (tick >= totalTicks) {
+        clearInterval(tickRef.current)
+        setSpinDisplay('')
+        setSpinning(false)
+        setCurrentWinners(winners)
+      }
+    }, TICK_INTERVAL_MS)
+  }
+
+  // PIN submit
+  const handlePin = (e) => {
+    e.preventDefault()
+    if (pinInput === ADMIN_PIN) { setUnlocked(true); setPinError(false) }
+    else { setPinError(true) }
+  }
+
+  // File parsing
+  const applyColumn = (wb, sheet, colIndex) => {
+    const rows = parseSheet(wb, sheet)
     const names = rows.slice(1).map(r => String(r[colIndex] ?? '').trim()).filter(Boolean)
     setEntries(names)
     setForcedWinner('')
+    setSaved(false)
     return names
   }
 
@@ -51,37 +121,17 @@ export default function AdminPage() {
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        const data = new Uint8Array(e.target.result)
-        const wb = XLSX.read(data, { type: 'array', cellText: true, cellDates: true })
-
+        const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellText: true, cellDates: true })
         if (!wb.SheetNames.length) { setError('No sheets found.'); return }
-
-        const sheetName = wb.SheetNames[0]
-        const rows = parseSheet(wb, sheetName)
-
-        console.log('[Admin] Sheets:', wb.SheetNames)
-        console.log('[Admin] Rows in first sheet:', rows.length)
-        console.log('[Admin] First 3 rows:', rows.slice(0, 3))
-
-        if (rows.length < 2) {
-          setError(`Sheet "${sheetName}" has no data rows. Open the console (F12) to see what was read.`)
-          return
-        }
-
-        const cols = rows[0].map((h, i) => ({
-          label: String(h).trim() || `Column ${i + 1}`,
-          index: i,
-        }))
+        const sheet = wb.SheetNames[0]
+        const rows = parseSheet(wb, sheet)
+        console.log('[Admin] Sheets:', wb.SheetNames, '| Rows:', rows.length, '| Sample:', rows.slice(0, 2))
+        if (rows.length < 2) { setError(`Sheet "${sheet}" has no data rows. Check console (F12) for details.`); return }
+        const cols = rows[0].map((h, i) => ({ label: String(h).trim() || `Column ${i + 1}`, index: i }))
         const names = rows.slice(1).map(r => String(r[0] ?? '').trim()).filter(Boolean)
-
-        setWorkbookData(wb)
-        setSheetNames(wb.SheetNames)
-        setSelectedSheet(sheetName)
-        setColumnOptions(cols)
-        setSelectedColumn(0)
-        setEntries(names)
-        setFileName(file.name)
-        setForcedWinner('')
+        setWorkbookData(wb); setSheetNames(wb.SheetNames); setSelectedSheet(sheet)
+        setColumnOptions(cols); setSelectedColumn(0); setEntries(names)
+        setFileName(file.name); setForcedWinner('')
       } catch (err) {
         console.error('[Admin] Parse error:', err)
         setError(`Failed to read file: ${err.message}`)
@@ -96,49 +146,93 @@ export default function AdminPage() {
     e.preventDefault(); setDragOver(false)
     if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0])
   }, [])
-  const handleDragOver = (e) => { e.preventDefault(); setDragOver(true) }
-  const handleDragLeave = () => setDragOver(false)
 
   const handleSheetChange = (sheet) => {
-    setSelectedSheet(sheet)
-    setSelectedColumn(0)
-    if (workbookData) applySheet(workbookData, sheet, 0)
+    setSelectedSheet(sheet); setSelectedColumn(0)
+    if (workbookData) applyColumn(workbookData, sheet, 0)
   }
 
-  const handleColumnChange = (colIndex) => {
-    setSelectedColumn(colIndex)
-    setForcedWinner('')
-    if (workbookData) {
-      const rows = parseSheet(workbookData, selectedSheet)
-      const names = rows.slice(1).map(r => String(r[colIndex] ?? '').trim()).filter(Boolean)
-      setEntries(names)
+  const handleColumnChange = (idx) => {
+    setSelectedColumn(idx)
+    if (workbookData) applyColumn(workbookData, selectedSheet, idx)
+  }
+
+  const handleSave = async () => {
+    if (!entries.length) { setError('No entries to save.'); return }
+    setSaving(true)
+    try {
+      await saveRaffleConfig({ entries, forcedWinner })
+      await resetDrawnWinners()
+      await setDrawIdle()
+      setSaved(true)
+    } catch (err) {
+      setError(`Save failed: ${err.message}`)
+    } finally {
+      setSaving(false)
     }
   }
 
-  const handleSave = () => {
-    if (!entries.length) { setError('No entries to save.'); return }
-    saveConfig({ fileName, sheetNames, selectedSheet, columnOptions, selectedColumn, entries, forcedWinner })
-    setSaved(true)
-    setTimeout(() => navigate('/'), 800)
+  const pool = entries.filter(e => !drawnWinners.includes(e))
+
+  const handleDraw = async () => {
+    if (spinning || pool.length === 0) return
+    const winners = forcedWinner && pool.includes(forcedWinner)
+      ? [forcedWinner]
+      : [pool[Math.floor(Math.random() * pool.length)]]
+    try {
+      await addDrawnWinners(winners)
+      await triggerDraw(winners)
+    } catch (err) {
+      setError(`Draw failed: ${err.message}`)
+    }
   }
 
-  const handleClear = () => {
-    clearConfig()
-    setFileName('')
-    setSheetNames([])
-    setSelectedSheet('')
-    setColumnOptions([])
-    setSelectedColumn(0)
-    setEntries([])
-    setForcedWinner('')
-    setWorkbookData(null)
-    setSaved(false)
-    if (fileRef.current) fileRef.current.value = ''
+  const handleUndo = async () => {
+    if (!currentWinners.length) return
+    try {
+      await removeDrawnWinners(currentWinners)
+      await setDrawIdle()
+      setCurrentWinners([])
+    } catch (err) {
+      setError(`Undo failed: ${err.message}`)
+    }
   }
 
-  const filteredEntries = entries.filter(e =>
-    e.toLowerCase().includes(search.toLowerCase())
-  )
+  const handleReset = async () => {
+    try {
+      await resetDrawnWinners()
+      await setDrawIdle()
+      setCurrentWinners([])
+    } catch (err) {
+      setError(`Reset failed: ${err.message}`)
+    }
+  }
+
+  const filteredEntries = entries.filter(e => e.toLowerCase().includes(search.toLowerCase()))
+
+  // PIN screen
+  if (!unlocked) {
+    return (
+      <div className="pin-screen">
+        <div className="pin-card">
+          <span className="pin-icon">🔒</span>
+          <h1>Admin Access</h1>
+          <form onSubmit={handlePin}>
+            <input
+              type="password"
+              className={`pin-input${pinError ? ' pin-error' : ''}`}
+              placeholder="Enter PIN"
+              value={pinInput}
+              onChange={e => { setPinInput(e.target.value); setPinError(false) }}
+              autoFocus
+            />
+            {pinError && <p className="pin-err-msg">Incorrect PIN</p>}
+            <button type="submit" className="btn-save">Unlock</button>
+          </form>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="admin-layout">
@@ -159,11 +253,10 @@ export default function AdminPage() {
             <div
               className={`drop-zone${dragOver ? ' drag-over' : ''}`}
               onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
+              onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
               onClick={() => fileRef.current.click()}
-              role="button"
-              tabIndex={0}
+              role="button" tabIndex={0}
               onKeyDown={e => e.key === 'Enter' && fileRef.current.click()}
             >
               <div className="drop-icon">📂</div>
@@ -175,7 +268,7 @@ export default function AdminPage() {
             <div className="loaded-bar">
               <span>📄</span>
               <span className="loaded-name">{fileName}</span>
-              <button className="btn-ghost" onClick={handleClear}>Change</button>
+              <button className="btn-ghost" onClick={() => { setFileName(''); setEntries([]); setWorkbookData(null) }}>Change</button>
             </div>
           )}
           {error && <p className="error-msg">{error}</p>}
@@ -188,48 +281,91 @@ export default function AdminPage() {
             <div className="config-grid">
               {sheetNames.length > 1 && (
                 <div className="config-row">
-                  <label htmlFor="sheet-sel">Sheet</label>
-                  <select id="sheet-sel" value={selectedSheet} onChange={e => handleSheetChange(e.target.value)}>
+                  <label>Sheet</label>
+                  <select value={selectedSheet} onChange={e => handleSheetChange(e.target.value)}>
                     {sheetNames.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
               )}
               <div className="config-row">
-                <label htmlFor="col-sel">Name column</label>
-                <select id="col-sel" value={selectedColumn} onChange={e => handleColumnChange(Number(e.target.value))}>
+                <label>Name column</label>
+                <select value={selectedColumn} onChange={e => handleColumnChange(Number(e.target.value))}>
                   {columnOptions.map(o => <option key={o.index} value={o.index}>{o.label}</option>)}
                 </select>
               </div>
             </div>
             <p className="entry-count">{entries.length} entries loaded</p>
+            <button className="btn-save" onClick={handleSave} disabled={saving || saved} style={{ marginTop: 16 }}>
+              {saving ? 'Saving…' : saved ? '✓ Saved to Firebase' : '☁️ Save Entries to Firebase'}
+            </button>
           </section>
         )}
 
         {/* Pre-select winner */}
-        {entries.length > 0 && (
+        {saved && entries.length > 0 && (
           <section className="admin-card">
             <h2>3. Pre-select Winner <span className="optional-tag">optional</span></h2>
-            <p className="section-sub">
-              Choose a specific entry that will be drawn. Leave blank for a truly random draw.
-            </p>
+            <p className="section-sub">Choose a specific entry that will be drawn, or leave blank for random.</p>
             <div className="config-row">
-              <label htmlFor="winner-sel">Winner</label>
-              <select
-                id="winner-sel"
-                value={forcedWinner}
-                onChange={e => setForcedWinner(e.target.value)}
-              >
+              <label>Winner</label>
+              <select value={forcedWinner} onChange={e => setForcedWinner(e.target.value)}>
                 <option value="">— Random —</option>
-                {entries.map((e, i) => <option key={i} value={e}>{e}</option>)}
+                {pool.map((e, i) => <option key={i} value={e}>{e}</option>)}
               </select>
             </div>
             {forcedWinner && (
-              <p className="forced-notice">🎯 <strong>{forcedWinner}</strong> will be drawn when the Draw button is pressed.</p>
+              <p className="forced-notice">🎯 <strong>{forcedWinner}</strong> will be drawn.</p>
             )}
           </section>
         )}
 
-        {/* Entry preview */}
+        {/* Draw control */}
+        {saved && entries.length > 0 && (
+          <section className="admin-card">
+            <h2>4. Control Draw</h2>
+
+            <div className={`mini-stage${spinning ? ' is-spinning' : ''}${currentWinners.length && !spinning ? ' has-winner' : ''}`}>
+              {spinning && <p className="spin-name">{spinDisplay}</p>}
+              {!spinning && currentWinners.length > 0 && (
+                <>
+                  <p className="winner-label">🎉 {currentWinners.length === 1 ? 'Winner' : 'Winners'}!</p>
+                  {currentWinners.map((w, i) => <p key={i} className="winner-name">{w}</p>)}
+                </>
+              )}
+              {!spinning && !currentWinners.length && (
+                <p className="stage-hint">Press Draw to begin</p>
+              )}
+            </div>
+
+            <div className="draw-controls-row">
+              <button className="btn-draw" onClick={handleDraw} disabled={spinning || pool.length === 0}>
+                {pool.length === 0 ? 'All drawn' : spinning ? 'Drawing…' : '🎲 Draw'}
+              </button>
+              {currentWinners.length > 0 && !spinning && (
+                <button className="btn-ghost" onClick={handleUndo}>↩ Undo</button>
+              )}
+              {drawnWinners.length > 0 && !spinning && (
+                <button className="btn-ghost" onClick={handleReset}>↺ Reset All</button>
+              )}
+            </div>
+
+            <div className="mini-stats">
+              <div className="mini-stat"><strong>{pool.length}</strong><span>Remaining</span></div>
+              <div className="mini-stat"><strong>{drawnWinners.length}</strong><span>Drawn</span></div>
+            </div>
+
+            {drawnWinners.length > 0 && (
+              <div className="drawn-list-wrap">
+                <p className="drawn-title">Drawn so far:</p>
+                <ol className="drawn-ol">
+                  {drawnWinners.map((w, i) => <li key={i}>{w}</li>)}
+                </ol>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Entry list preview */}
         {entries.length > 0 && (
           <section className="admin-card">
             <h2>Entry List Preview</h2>
@@ -244,9 +380,9 @@ export default function AdminPage() {
               {filteredEntries.map((entry, i) => (
                 <span
                   key={i}
-                  className={`entry-chip${entry === forcedWinner ? ' forced' : ''}`}
+                  className={`entry-chip${entry === forcedWinner ? ' forced' : ''}${drawnWinners.includes(entry) ? ' drawn' : ''}`}
                   onClick={() => setForcedWinner(prev => prev === entry ? '' : entry)}
-                  title={entry === forcedWinner ? 'Click to unselect' : 'Click to pre-select as winner'}
+                  title={drawnWinners.includes(entry) ? 'Already drawn' : entry === forcedWinner ? 'Click to unselect' : 'Click to pre-select'}
                 >
                   {entry}
                 </span>
@@ -254,15 +390,6 @@ export default function AdminPage() {
             </div>
             {search && <p className="search-count">{filteredEntries.length} of {entries.length} shown</p>}
           </section>
-        )}
-
-        {/* Save */}
-        {entries.length > 0 && (
-          <div className="save-row">
-            <button className="btn-save" onClick={handleSave} disabled={saved}>
-              {saved ? '✓ Saved — going to draw…' : '💾 Save & Go to Draw'}
-            </button>
-          </div>
         )}
       </main>
     </div>

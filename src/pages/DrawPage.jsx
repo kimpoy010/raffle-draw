@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { loadConfig } from '../lib/store.js'
+import { subscribeRaffle } from '../lib/raffle.js'
 import './DrawPage.css'
 
 const DRAW_DURATION_MS = 2500
@@ -8,72 +8,63 @@ const TICK_INTERVAL_MS = 60
 
 export default function DrawPage() {
   const navigate = useNavigate()
-  const config = loadConfig()
 
-  const [entries] = useState(config?.entries ?? [])
-  const [forcedWinner] = useState(config?.forcedWinner ?? '')
+  const [entries, setEntries] = useState([])
   const [drawnWinners, setDrawnWinners] = useState([])
-  const [currentWinner, setCurrentWinner] = useState(null)
+  const [currentWinners, setCurrentWinners] = useState([])
   const [spinning, setSpinning] = useState(false)
   const [spinDisplay, setSpinDisplay] = useState('')
-  const [drawCount, setDrawCount] = useState(1)
+  const [connected, setConnected] = useState(false)
+
   const tickRef = useRef(null)
+  const lastStartRef = useRef(0)
+  const entriesRef = useRef([])
 
-  useEffect(() => () => clearInterval(tickRef.current), [])
+  useEffect(() => {
+    const unsub = subscribeRaffle((data) => {
+      setConnected(true)
+      if (!data) return
 
-  const pool = entries.filter(e => !drawnWinners.includes(e))
+      const config = data.config ?? {}
+      const newEntries = config.entries ?? []
+      setEntries(newEntries)
+      entriesRef.current = newEntries
 
-  const drawWinners = () => {
-    if (spinning || pool.length === 0) return
-    const count = Math.min(drawCount, pool.length)
+      const drawn = data.drawnWinners ?? []
+      setDrawnWinners(Array.isArray(drawn) ? drawn : Object.values(drawn))
 
-    let winners
-    if (forcedWinner && pool.includes(forcedWinner) && count === 1) {
-      winners = [forcedWinner]
-    } else {
-      winners = [...pool].sort(() => Math.random() - 0.5).slice(0, count)
-    }
+      const draw = data.draw
+      if (!draw || draw.state === 'idle') return
+      if (draw.state === 'spinning' && draw.startedAt !== lastStartRef.current) {
+        lastStartRef.current = draw.startedAt
+        const elapsed = Date.now() - draw.startedAt
+        const remaining = Math.max(0, DRAW_DURATION_MS - elapsed)
+        startLocalSpin(draw.winners, remaining)
+      }
+    })
+    return () => { unsub(); clearInterval(tickRef.current) }
+  }, [])
 
+  const startLocalSpin = (winners, duration) => {
+    clearInterval(tickRef.current)
     setSpinning(true)
-    setCurrentWinner(null)
-
+    setCurrentWinners([])
+    const totalTicks = Math.max(1, Math.floor(duration / TICK_INTERVAL_MS))
     let tick = 0
-    const totalTicks = Math.floor(DRAW_DURATION_MS / TICK_INTERVAL_MS)
-
     tickRef.current = setInterval(() => {
-      setSpinDisplay(pool[Math.floor(Math.random() * pool.length)])
+      const pool = entriesRef.current
+      setSpinDisplay(pool[Math.floor(Math.random() * pool.length)] ?? '…')
       tick++
       if (tick >= totalTicks) {
         clearInterval(tickRef.current)
         setSpinDisplay('')
         setSpinning(false)
-        setCurrentWinner(winners)
-        setDrawnWinners(prev => [...prev, ...winners])
+        setCurrentWinners(winners)
       }
     }, TICK_INTERVAL_MS)
   }
 
-  const undoLastDraw = () => {
-    if (spinning || !currentWinner) return
-    setDrawnWinners(prev => prev.filter(w => !currentWinner.includes(w)))
-    setCurrentWinner(null)
-  }
-
-  const resetWinners = () => {
-    setDrawnWinners([])
-    setCurrentWinner(null)
-  }
-
-  if (!entries.length) {
-    return (
-      <div className="draw-empty">
-        <p className="empty-icon">🎟️</p>
-        <p className="empty-title">No raffle list loaded</p>
-        <p className="empty-sub">Go to Admin to upload your Excel file.</p>
-        <button className="btn-draw" onClick={() => navigate('/admin')}>Go to Admin →</button>
-      </div>
-    )
-  }
+  const pool = entries.filter(e => !drawnWinners.includes(e))
 
   return (
     <div className="draw-layout">
@@ -82,83 +73,57 @@ export default function DrawPage() {
           <span className="draw-logo">🏆</span>
           <h1>Raffle Draw</h1>
         </div>
-        <button className="btn-ghost" onClick={() => navigate('/admin')}>⚙️ Admin</button>
+        <div className="header-right">
+          <span className={`live-dot${connected ? ' live' : ''}`} title={connected ? 'Connected' : 'Connecting…'} />
+          <button className="btn-ghost" onClick={() => navigate('/admin')}>⚙️ Admin</button>
+        </div>
       </header>
 
       <div className="draw-body">
 
-        {/* Left: entries sidebar */}
+        {/* Entries sidebar */}
         <aside className="entries-sidebar">
           <h2>Entries <span className="sidebar-count">{entries.length}</span></h2>
-          <div className="entries-scroll">
-            {entries.map((entry, i) => (
-              <div
-                key={i}
-                className={`sidebar-entry${drawnWinners.includes(entry) ? ' drawn' : ''}`}
-              >
-                {entry}
-              </div>
-            ))}
-          </div>
+          {entries.length === 0 ? (
+            <p className="sidebar-empty">Waiting for admin to load entries…</p>
+          ) : (
+            <div className="entries-scroll">
+              {entries.map((entry, i) => (
+                <div key={i} className={`sidebar-entry${drawnWinners.includes(entry) ? ' drawn' : ''}`}>
+                  {entry}
+                </div>
+              ))}
+            </div>
+          )}
         </aside>
 
-        {/* Right: draw stage */}
+        {/* Draw stage */}
         <main className="draw-stage">
 
-          {/* Winner stage */}
-          <div className={`winner-stage${spinning ? ' is-spinning' : ''}${currentWinner ? ' has-winner' : ''}`}>
+          <div className={`winner-stage${spinning ? ' is-spinning' : ''}${currentWinners.length && !spinning ? ' has-winner' : ''}`}>
             {spinning && (
               <div className="spin-box">
                 <p className="spin-label">Drawing…</p>
                 <p className="spin-name">{spinDisplay}</p>
               </div>
             )}
-            {!spinning && currentWinner && (
+            {!spinning && currentWinners.length > 0 && (
               <div className="winner-box">
-                <p className="winner-label">
-                  {currentWinner.length === 1 ? '🎉 Winner!' : '🎉 Winners!'}
-                </p>
-                {currentWinner.map((w, i) => (
-                  <p key={i} className="winner-name">{w}</p>
-                ))}
+                <p className="winner-label">{currentWinners.length === 1 ? '🎉 Winner!' : '🎉 Winners!'}</p>
+                {currentWinners.map((w, i) => <p key={i} className="winner-name">{w}</p>)}
               </div>
             )}
-            {!spinning && !currentWinner && (
-              <p className="stage-hint">Press Draw to pick a winner</p>
+            {!spinning && currentWinners.length === 0 && (
+              <p className="stage-hint">
+                {entries.length === 0
+                  ? 'Waiting for admin to set up the raffle…'
+                  : pool.length === 0
+                  ? 'All entries have been drawn!'
+                  : 'Waiting for the draw…'}
+              </p>
             )}
           </div>
 
-          {/* Controls */}
-          <div className="draw-controls">
-            <div className="count-group">
-              <label htmlFor="draw-count">Winners:</label>
-              <input
-                id="draw-count"
-                type="number"
-                min={1}
-                max={pool.length || 1}
-                value={drawCount}
-                onChange={e => setDrawCount(Math.max(1, Math.min(pool.length, Number(e.target.value))))}
-                className="count-input"
-                disabled={spinning}
-              />
-            </div>
-            <button
-              className="btn-draw"
-              onClick={drawWinners}
-              disabled={spinning || pool.length === 0}
-            >
-              {pool.length === 0 ? 'All entries drawn' : spinning ? 'Drawing…' : '🎲 Draw'}
-            </button>
-            {currentWinner && !spinning && (
-              <button className="btn-ghost" onClick={undoLastDraw}>↩ Undo</button>
-            )}
-            {drawnWinners.length > 0 && !spinning && (
-              <button className="btn-ghost" onClick={resetWinners}>↺ Reset</button>
-            )}
-          </div>
-
-          {/* Stats */}
           <div className="stats-row">
             <div className="stat-card">
               <span className="stat-num">{entries.length}</span>
@@ -174,7 +139,6 @@ export default function DrawPage() {
             </div>
           </div>
 
-          {/* Previous winners */}
           {drawnWinners.length > 0 && (
             <div className="history-card">
               <h2>Previous Winners</h2>
